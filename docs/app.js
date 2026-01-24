@@ -32,8 +32,12 @@ function fmtRange(start, end) {
     : `${s.toLocaleString()} – ${e.toLocaleString()}`;
 }
 function dayKey(iso) {
-  // YYYY-MM-DD
-  return new Date(iso).toISOString().slice(0, 10);
+  // group by local date (not UTC) so you don't get weird day shifts
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
 }
 function escapeHtml(s) {
   return String(s ?? "")
@@ -45,55 +49,84 @@ function escapeHtml(s) {
 }
 function normCategory(x) {
   const v = String(x ?? "").trim().toLowerCase();
-  if (!v) return "";
+  if (!v) return "Wildlife";
   if (v === "vehicles" || v === "vehicle") return "Vehicle";
   if (v === "people" || v === "person" || v === "human") return "People";
   if (v === "wildlife" || v === "animal") return "Wildlife";
-  // Unknown category -> treat as Wildlife by default
   return "Wildlife";
+}
+
+function getArrayFromEventsJson(data) {
+  // Handles:
+  // 1) { events: [...] }
+  // 2) { sessions: [...] }
+  // 3) [...] (top-level array)
+  // 4) nested weirdness (defensive)
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.events)) return data.events;
+  if (Array.isArray(data?.sessions)) return data.sessions;
+  if (Array.isArray(data?.data?.events)) return data.data.events;
+  if (Array.isArray(data?.data?.sessions)) return data.data.sessions;
+  return [];
 }
 
 // ---- Data ----
 let ALL = []; // normalized events
 
-// Your events.json shape:
-// { "events": [ { event_id, camera, species, start, end, count, thumbnail_file_id, items:[{datetime, filename, file_id}] } ] }
 async function load() {
-  const res = await fetch("./events.json", { cache: "no-store" });
+  // IMPORTANT: relative fetch so GitHub Pages subpaths work
+  const res = await fetch("events.json", { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch events.json (${res.status})`);
 
   const data = await res.json();
-  const raw = Array.isArray(data?.events) ? data.events : [];
+  const raw = getArrayFromEventsJson(data);
 
-  // Normalize into a single internal shape
-  ALL = raw.map(ev => {
-    const items = Array.isArray(ev.items) ? ev.items : [];
+  // Visible debug line (you can remove later)
+  meta.textContent = `Loaded raw array length: ${raw.length} (keys: ${Object.keys(data || {}).join(", ") || "top-level array"})`;
+
+  // Normalize into ONE internal shape (support both "event" and "session" fields)
+  ALL = raw.map((x) => {
+    const items = Array.isArray(x.items) ? x.items : [];
+
+    const camera = x.camera ?? x.cam ?? "";
+    const label = x.species ?? x.label ?? "Unknown";
+
+    const start = x.start ?? x.start_time ?? x.begin ?? "";
+    const end = x.end ?? x.end_time ?? x.finish ?? start;
+
+    const id =
+      x.event_id ??
+      x.session_id ??
+      x.id ??
+      `${camera}|${label}|${start}`;
+
     const thumbId =
-      ev.thumbnail_file_id ||
-      ev.thumb_file_id ||
+      x.thumbnail_file_id ||
+      x.thumb_file_id ||
+      x.file_id ||
       (items.length ? items[0].file_id : "");
 
     return {
-      id: ev.event_id || `${ev.camera || "unknown"}|${ev.species || "Unknown"}|${ev.start || ""}`,
-      camera: String(ev.camera ?? "").trim(),
-      category: normCategory(ev.category) || "Wildlife",
-      label: String(ev.species ?? ev.label ?? "Unknown").trim(),
-      start: ev.start,
-      end: ev.end || ev.start,
-      count: Number.isFinite(ev.count) ? ev.count : items.length,
+      id: String(id),
+      camera: String(camera).trim(),
+      category: normCategory(x.category),
+      label: String(label).trim(),
+      start,
+      end,
+      count: Number.isFinite(x.count) ? x.count : items.length,
       thumb_file_id: thumbId,
-      items: items.map(p => ({
+      items: items.map((p) => ({
         file_id: p.file_id,
         datetime: p.datetime,
         filename: p.filename,
-        drive_url: p.drive_url
-      }))
+        drive_url: p.drive_url,
+      })),
     };
-  });
+  }).filter(e => e.start); // drop any broken rows missing start
 
   // Populate camera dropdown (reset first)
   while (cam.children.length > 1) cam.removeChild(cam.lastChild);
-  const cams = [...new Set(ALL.map(s => s.camera).filter(Boolean))].sort();
+  const cams = [...new Set(ALL.map((s) => s.camera).filter(Boolean))].sort();
   for (const c of cams) {
     const opt = document.createElement("option");
     opt.value = c;
@@ -110,7 +143,7 @@ function apply() {
   const m = cam.value;
   const srt = sort.value;
 
-  let filtered = ALL.filter(s => {
+  let filtered = ALL.filter((s) => {
     if (c && s.category !== c) return false;
     if (m && s.camera !== m) return false;
 
@@ -123,7 +156,9 @@ function apply() {
   if (srt === "old") filtered.sort((a, b) => new Date(a.start) - new Date(b.start));
   if (srt === "count") filtered.sort((a, b) => (b.count || 0) - (a.count || 0));
 
-  meta.textContent = `${filtered.length} events • ${filtered.reduce((acc, x) => acc + (x.count || 0), 0)} photos`;
+  // Append counts after the debug line
+  const countLine = `${filtered.length} events • ${filtered.reduce((acc, x) => acc + (x.count || 0), 0)} photos`;
+  meta.textContent = `${meta.textContent} — ${countLine}`;
 
   renderByDay(filtered);
 }
@@ -131,10 +166,8 @@ function apply() {
 function renderByDay(events) {
   app.innerHTML = "";
 
-  // group by day (newest day first)
   const map = new Map();
   for (const s of events) {
-    if (!s.start) continue;
     const k = dayKey(s.start);
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(s);
@@ -157,18 +190,17 @@ function renderByDay(events) {
     section.appendChild(scroller);
     app.appendChild(section);
 
-    // delegate clicks
-    scroller.querySelectorAll("[data-event]").forEach(el => {
+    scroller.querySelectorAll("[data-event]").forEach((el) => {
       el.addEventListener("click", () => {
         const id = el.getAttribute("data-event");
-        const evt = items.find(x => x.id === id);
+        const evt = items.find((x) => x.id === id);
         if (evt) openModal(evt);
       });
     });
   }
 
   if (!days.length) {
-    app.innerHTML = `<div class="loading">No matching events.</div>`;
+    app.innerHTML = `<div class="loading">No matching events. (Loaded ALL=${ALL.length})</div>`;
   }
 }
 
@@ -200,7 +232,7 @@ function openModal(s) {
   modalSub.textContent = `${fmtRange(s.start, s.end)} • ${s.count || (s.items ? s.items.length : 0)} photos`;
 
   const items = s.items || [];
-  modalGrid.innerHTML = items.map(p => {
+  modalGrid.innerHTML = items.map((p) => {
     const fileId = p.file_id;
     const thumb = fileId ? driveThumb(fileId, 600) : "";
     const view = p.drive_url || (fileId ? driveView(fileId) : "#");
@@ -235,6 +267,6 @@ cam.addEventListener("change", apply);
 sort.addEventListener("change", apply);
 
 // ---- Start ----
-load().catch(err => {
+load().catch((err) => {
   app.innerHTML = `<div class="loading">Failed to load events.json. ${escapeHtml(err.message)}</div>`;
 });
