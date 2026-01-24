@@ -1,0 +1,60 @@
+name: Deploy Ranch Site (GitHub Pages)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *" # every 30 minutes (adjust)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout site repo
+        uses: actions/checkout@v4
+
+      - name: Install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        env:
+          RCLONE_CONF: ${{ secrets.RCLONE_CONF }}
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONF" > ~/.config/rclone/rclone.conf
+
+      # Pull the latest events.json from your Drive folder into docs/
+      - name: Download events.json from Drive
+        env:
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: |
+          mkdir -p docs
+          rclone copyto "gdrive:events.json" "docs/events.json" --drive-root-folder-id "$GDRIVE_FOLDER_ID" -v
+
+      # Optional sanity check so you don’t deploy a broken site
+      - name: Verify docs/ exists
+        run: |
+          test -f docs/index.html || (echo "Missing docs/index.html" && exit 1)
+          test -f docs/events.json || (echo "Missing docs/events.json" && exit 1)
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
