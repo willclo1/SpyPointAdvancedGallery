@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -18,15 +19,18 @@
 
     <div class="controls">
       <input id="q" class="search" placeholder="Search: deer, hog, feeder…" />
+      <!-- Category is optional now; your JSON is wildlife-only unless you add people/vehicle later -->
       <select id="cat" class="select">
         <option value="">All</option>
         <option value="Wildlife">Wildlife</option>
         <option value="People">People</option>
-        <option value="Vehicles">Vehicles</option>
+        <option value="Vehicle">Vehicle</option>
       </select>
+
       <select id="cam" class="select">
         <option value="">All Cameras</option>
       </select>
+
       <select id="sort" class="select">
         <option value="new">Newest first</option>
         <option value="old">Oldest first</option>
@@ -38,16 +42,16 @@
   <main class="container">
     <div id="meta" class="meta"></div>
     <div id="app" class="app">
-      <div class="loading">Loading sessions…</div>
+      <div class="loading">Loading events…</div>
     </div>
   </main>
 
-  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Event details">
     <div class="modal-overlay" id="modalOverlay"></div>
     <div class="modal-card">
       <div class="modal-head">
         <div id="modalTitle" class="modal-title"></div>
-        <button id="modalClose" class="icon-btn" title="Close">✕</button>
+        <button id="modalClose" class="icon-btn" title="Close" aria-label="Close">✕</button>
       </div>
       <div id="modalSub" class="modal-sub"></div>
       <div id="modalGrid" class="modal-grid"></div>
