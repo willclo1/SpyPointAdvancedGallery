@@ -1,4 +1,3 @@
-<!-- index.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,31 +10,25 @@
   <header class="topbar">
     <div class="brand">
       <div class="logo">🦌</div>
-      <div>
+      <div class="brand-text">
         <div class="title">Ranch Events</div>
-        <div class="subtitle">Netflix-style grouped sightings</div>
+        <div class="subtitle">Daily grouped sightings — clean, fast, and visual</div>
       </div>
     </div>
 
-    <div class="controls">
-      <input id="q" class="search" placeholder="Search: deer, hog, feeder…" />
-      <!-- Category is optional now; your JSON is wildlife-only unless you add people/vehicle later -->
-      <select id="cat" class="select">
-        <option value="">All</option>
-        <option value="Wildlife">Wildlife</option>
-        <option value="People">People</option>
-        <option value="Vehicle">Vehicle</option>
-      </select>
-
-      <select id="cam" class="select">
-        <option value="">All Cameras</option>
-      </select>
-
-      <select id="sort" class="select">
-        <option value="new">Newest first</option>
-        <option value="old">Oldest first</option>
-        <option value="count">Most photos</option>
-      </select>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Events</div>
+        <div id="statEvents" class="stat-value">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Photos</div>
+        <div id="statPhotos" class="stat-value">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Days</div>
+        <div id="statDays" class="stat-value">—</div>
+      </div>
     </div>
   </header>
 
@@ -46,12 +39,12 @@
     </div>
   </main>
 
-  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Event details">
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-overlay" id="modalOverlay"></div>
     <div class="modal-card">
       <div class="modal-head">
         <div id="modalTitle" class="modal-title"></div>
-        <button id="modalClose" class="icon-btn" title="Close" aria-label="Close">✕</button>
+        <button id="modalClose" class="icon-btn" title="Close">✕</button>
       </div>
       <div id="modalSub" class="modal-sub"></div>
       <div id="modalGrid" class="modal-grid"></div>
