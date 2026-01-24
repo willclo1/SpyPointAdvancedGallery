@@ -16,12 +16,145 @@ const modalGrid = document.getElementById("modalGrid");
 // ---- Species normalization / merging ----
 // Edit this list as you encounter new "scientific-ish" labels you want to fold into a common name.
 // Key = incoming label (case-insensitive match after cleanup), Value = canonical label to use.
+// ================================
+// MASSIVE ranch species cleanup map
+// "If it looks like X, call it X"
+// ================================
 const SPECIES_SYNONYMS = new Map([
-  ["artiodactyla order", "Ungulates"], // generic grouping bucket (safe)
-  ["cervidae family", "Deer"],
+
+  // =========================
+  // DEER / UNGULATES
+  // =========================
+  ["ungulate", "White-tailed Deer"],
+  ["ungulates", "White-tailed Deer"],
+  ["artiodactyla", "White-tailed Deer"],
+  ["artiodactyla order", "White-tailed Deer"],
+  ["cervidae", "White-tailed Deer"],
+  ["cervidae family", "White-tailed Deer"],
+  ["odocoileus", "White-tailed Deer"],
   ["odocoileus virginianus", "White-tailed Deer"],
+  ["white tailed deer", "White-tailed Deer"],
+  ["whitetail", "White-tailed Deer"],
+  ["whitetail deer", "White-tailed Deer"],
+  ["white-tail deer", "White-tailed Deer"],
+  ["buck", "White-tailed Deer"],
+  ["doe", "White-tailed Deer"],
+  ["fawn", "White-tailed Deer"],
+  ["deer", "White-tailed Deer"],
+
+  // =========================
+  // HOGS
+  // =========================
+  ["hog", "Feral Hog"],
+  ["hogs", "Feral Hog"],
+  ["wild hog", "Feral Hog"],
+  ["feral hog", "Feral Hog"],
+  ["boar", "Feral Hog"],
+  ["sow", "Feral Hog"],
+  ["pig", "Feral Hog"],
+  ["wild pig", "Feral Hog"],
+  ["sus scrofa", "Feral Hog"],
+  ["swine", "Feral Hog"],
+
+  // =========================
+  // COYOTE / PREDATORS
+  // =========================
+  ["canid", "Coyote"],
+  ["canidae", "Coyote"],
+  ["canis", "Coyote"],
+  ["canis latrans", "Coyote"],
+  ["coyote", "Coyote"],
+
+  ["fox", "Fox"],
+  ["vulpes", "Fox"],
+  ["vulpes vulpes", "Fox"],
+
+  ["bobcat", "Bobcat"],
+  ["lynx rufus", "Bobcat"],
+
+  ["mountain lion", "Mountain Lion"],
+  ["cougar", "Mountain Lion"],
+  ["puma", "Mountain Lion"],
+  ["felid", "Mountain Lion"],
+  ["felidae", "Mountain Lion"],
+
+  // =========================
+  // SMALL MAMMALS
+  // =========================
+  ["raccoon", "Raccoon"],
+  ["procyon lotor", "Raccoon"],
+  ["racoon", "Raccoon"],
+
+  ["opossum", "Opossum"],
+  ["possum", "Opossum"],
+  ["didelphis", "Opossum"],
+
+  ["armadillo", "Armadillo"],
+  ["dasypus", "Armadillo"],
+
+  ["skunk", "Skunk"],
+  ["mephitis", "Skunk"],
+
+  ["rabbit", "Rabbit"],
+  ["cottontail", "Rabbit"],
+  ["hare", "Rabbit"],
+
+  ["squirrel", "Squirrel"],
+  ["rodent", "Squirrel"],
+  ["rodentia", "Squirrel"],
+
+  // =========================
+  // BIRDS (collapse to clean names)
+  // =========================
+  ["corvus", "Raven"],
+  ["corvus corax", "Raven"],
+  ["raven", "Raven"],
+
+  ["crow", "Crow"],
+  ["american crow", "Crow"],
+
+  ["vulture", "Vulture"],
+  ["turkey vulture", "Vulture"],
+  ["black vulture", "Vulture"],
+
+  ["hawk", "Hawk"],
+  ["buteo", "Hawk"],
+
+  ["owl", "Owl"],
+  ["strix", "Owl"],
+
+  ["wild turkey", "Wild Turkey"],
+  ["turkey", "Wild Turkey"],
+  ["meleagris", "Wild Turkey"],
+
+  ["dove", "Dove"],
+  ["mourning dove", "Dove"],
+
+  ["roadrunner", "Roadrunner"],
+
+  // =========================
+  // LIVESTOCK
+  // =========================
   ["bos taurus", "Cattle"],
-  // Add more here as needed
+  ["cattle", "Cattle"],
+  ["cow", "Cattle"],
+  ["bull", "Cattle"],
+
+  ["horse", "Horse"],
+  ["equus", "Horse"],
+
+  ["goat", "Goat"],
+  ["sheep", "Sheep"],
+
+  // =========================
+  // THROWAWAYS → Other
+  // =========================
+  ["animal", "Other"],
+  ["mammal", "Other"],
+  ["wildlife", "Other"],
+  ["species", "Other"],
+  ["unknown", "Other"],
+  ["none", "Other"]
 ]);
 
 function cleanLabel(s) {
