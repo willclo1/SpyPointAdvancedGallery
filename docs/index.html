@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ranch Events</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Ranch wildlife monitoring system - grouped daily sightings and events" />
+  <title>Ranch Events | Wildlife Monitoring</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
   <header class="topbar">
@@ -12,7 +15,7 @@
       <div class="logo">🦌</div>
       <div class="brand-text">
         <div class="title">Ranch Events</div>
-        <div class="subtitle">Daily grouped sightings</div>
+        <div class="subtitle">Wildlife Monitoring</div>
       </div>
     </div>
 
@@ -39,12 +42,12 @@
     </div>
   </main>
 
-  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-overlay" id="modalOverlay"></div>
-    <div class="modal-card">
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-overlay" id="modalOverlay" aria-hidden="true"></div>
+    <div class="modal-card" role="document">
       <div class="modal-head">
-        <div id="modalTitle" class="modal-title"></div>
-        <button id="modalClose" class="icon-btn" title="Close">✕</button>
+        <h2 id="modalTitle" class="modal-title"></h2>
+        <button id="modalClose" class="icon-btn" type="button" aria-label="Close modal" title="Close">✕</button>
       </div>
       <div id="modalSub" class="modal-sub"></div>
       <div id="modalGrid" class="modal-grid"></div>

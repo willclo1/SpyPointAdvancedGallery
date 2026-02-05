@@ -1,4 +1,4 @@
-// app.js
+// app.js - Enhanced version with smooth interactions
 const app = document.getElementById("app");
 const meta = document.getElementById("meta");
 
@@ -13,18 +13,11 @@ const modalTitle = document.getElementById("modalTitle");
 const modalSub = document.getElementById("modalSub");
 const modalGrid = document.getElementById("modalGrid");
 
-// ---- Species normalization / merging ----
-// Edit this list as you encounter new "scientific-ish" labels you want to fold into a common name.
-// Key = incoming label (case-insensitive match after cleanup), Value = canonical label to use.
-// ================================
-// MASSIVE ranch species cleanup map
-// "If it looks like X, call it X"
-// ================================
+// ========================================
+// SPECIES NORMALIZATION
+// ========================================
 const SPECIES_SYNONYMS = new Map([
-
-  // =========================
   // DEER / UNGULATES
-  // =========================
   ["ungulate", "White-tailed Deer"],
   ["ungulates", "White-tailed Deer"],
   ["artiodactyla", "White-tailed Deer"],
@@ -42,9 +35,7 @@ const SPECIES_SYNONYMS = new Map([
   ["fawn", "White-tailed Deer"],
   ["deer", "White-tailed Deer"],
 
-  // =========================
   // HOGS
-  // =========================
   ["hog", "Feral Hog"],
   ["hogs", "Feral Hog"],
   ["wild hog", "Feral Hog"],
@@ -56,9 +47,7 @@ const SPECIES_SYNONYMS = new Map([
   ["sus scrofa", "Feral Hog"],
   ["swine", "Feral Hog"],
 
-  // =========================
   // COYOTE / PREDATORS
-  // =========================
   ["canid", "Coyote"],
   ["canidae", "Coyote"],
   ["canis", "Coyote"],
@@ -78,9 +67,7 @@ const SPECIES_SYNONYMS = new Map([
   ["felid", "Mountain Lion"],
   ["felidae", "Mountain Lion"],
 
-  // =========================
   // SMALL MAMMALS
-  // =========================
   ["raccoon", "Raccoon"],
   ["procyon lotor", "Raccoon"],
   ["racoon", "Raccoon"],
@@ -103,9 +90,7 @@ const SPECIES_SYNONYMS = new Map([
   ["rodent", "Squirrel"],
   ["rodentia", "Squirrel"],
 
-  // =========================
-  // BIRDS (collapse to clean names)
-  // =========================
+  // BIRDS
   ["corvus", "Raven"],
   ["corvus corax", "Raven"],
   ["raven", "Raven"],
@@ -132,9 +117,7 @@ const SPECIES_SYNONYMS = new Map([
 
   ["roadrunner", "Roadrunner"],
 
-  // =========================
   // LIVESTOCK
-  // =========================
   ["bos taurus", "Cattle"],
   ["cattle", "Cattle"],
   ["cow", "Cattle"],
@@ -146,9 +129,7 @@ const SPECIES_SYNONYMS = new Map([
   ["goat", "Goat"],
   ["sheep", "Sheep"],
 
-  // =========================
   // THROWAWAYS → Other
-  // =========================
   ["animal", "Other"],
   ["mammal", "Other"],
   ["wildlife", "Other"],
@@ -160,31 +141,40 @@ const SPECIES_SYNONYMS = new Map([
 function cleanLabel(s) {
   return String(s ?? "").trim();
 }
+
 function labelKey(s) {
   return cleanLabel(s).toLowerCase().replace(/\s+/g, " ");
 }
+
 function canonicalSpecies(label) {
   const k = labelKey(label);
   return SPECIES_SYNONYMS.get(k) || cleanLabel(label) || "Unknown";
 }
 
-// ---- Helpers ----
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
 function driveThumb(fileId, size = 800) {
   return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${size}`;
 }
+
 function driveView(fileId) {
   return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
 }
+
 function fmtRange(start, end) {
   const s = new Date(start);
   const e = new Date(end);
   const sameDay = s.toDateString() === e.toDateString();
   const optsT = { hour: "numeric", minute: "2-digit" };
-  const optsD = { month: "short", day: "numeric" };
-  return sameDay
-    ? `${s.toLocaleDateString(undefined, optsD)} • ${s.toLocaleTimeString(undefined, optsT)}–${e.toLocaleTimeString(undefined, optsT)}`
-    : `${s.toLocaleString()} – ${e.toLocaleString()}`;
+  const optsD = { month: "short", day: "numeric", year: "numeric" };
+  
+  if (sameDay) {
+    return `${s.toLocaleDateString(undefined, optsD)} • ${s.toLocaleTimeString(undefined, optsT)}–${e.toLocaleTimeString(undefined, optsT)}`;
+  }
+  return `${s.toLocaleDateString(undefined, optsD)} ${s.toLocaleTimeString(undefined, optsT)} – ${e.toLocaleDateString(undefined, optsD)} ${e.toLocaleTimeString(undefined, optsT)}`;
 }
+
 function dayKeyLocal(iso) {
   const d = new Date(iso);
   const y = d.getFullYear();
@@ -192,6 +182,14 @@ function dayKeyLocal(iso) {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 }
+
+function formatDayDisplay(dayKey) {
+  const [year, month, day] = dayKey.split('-');
+  const date = new Date(year, month - 1, day);
+  const options = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
+  return date.toLocaleDateString(undefined, options);
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")
@@ -201,7 +199,6 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
-// Accept multiple possible JSON shapes
 function getArrayFromEventsJson(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.events)) return data.events;
@@ -211,66 +208,55 @@ function getArrayFromEventsJson(data) {
   return [];
 }
 
-// ---- Data ----
-let ALL = []; // normalized events
+// ========================================
+// DATA LOADING & PROCESSING
+// ========================================
+let ALL = [];
 
 async function load() {
-  const res = await fetch("events.json", { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch events.json (${res.status})`);
-  const data = await res.json();
-  const raw = getArrayFromEventsJson(data);
+  try {
+    const res = await fetch("events.json", { cache: "no-store" });
+    if (!res.ok) throw new Error(`Failed to fetch events.json (${res.status})`);
+    const data = await res.json();
+    const raw = getArrayFromEventsJson(data);
 
-  // Normalize to internal shape
-  ALL = raw
-    .map((x) => {
-      const items = Array.isArray(x.items) ? x.items : [];
+    ALL = raw
+      .map((x) => {
+        const items = Array.isArray(x.items) ? x.items : [];
+        const camera = String(x.camera ?? x.cam ?? "").trim();
+        const rawLabel = x.species ?? x.label ?? "Unknown";
+        const label = canonicalSpecies(rawLabel);
+        const start = x.start ?? x.start_time ?? x.begin ?? "";
+        const end = x.end ?? x.end_time ?? x.finish ?? start;
+        const id = x.event_id ?? x.session_id ?? x.id ?? `${camera}|${label}|${start}`;
+        const thumbId = x.thumbnail_file_id || x.thumb_file_id || x.file_id || (items.length ? items[0].file_id : "");
 
-      const camera = String(x.camera ?? x.cam ?? "").trim();
-      const rawLabel = x.species ?? x.label ?? "Unknown";
-      const label = canonicalSpecies(rawLabel);
+        return {
+          id: String(id),
+          camera,
+          label,
+          start,
+          end,
+          count: Number.isFinite(x.count) ? x.count : items.length,
+          thumb_file_id: thumbId,
+          items: items.map((p) => ({
+            file_id: p.file_id,
+            datetime: p.datetime,
+            filename: p.filename,
+            drive_url: p.drive_url,
+          })),
+        };
+      })
+      .filter((e) => e.start);
 
-      const start = x.start ?? x.start_time ?? x.begin ?? "";
-      const end = x.end ?? x.end_time ?? x.finish ?? start;
-
-      const id =
-        x.event_id ??
-        x.session_id ??
-        x.id ??
-        `${camera}|${label}|${start}`;
-
-      const thumbId =
-        x.thumbnail_file_id ||
-        x.thumb_file_id ||
-        x.file_id ||
-        (items.length ? items[0].file_id : "");
-
-      return {
-        id: String(id),
-        camera,
-        label,
-        start,
-        end,
-        count: Number.isFinite(x.count) ? x.count : items.length,
-        thumb_file_id: thumbId,
-        items: items.map((p) => ({
-          file_id: p.file_id,
-          datetime: p.datetime,
-          filename: p.filename,
-          drive_url: p.drive_url,
-        })),
-      };
-    })
-    .filter((e) => e.start);
-
-  // Merge events that became the same label after canonicalization IF their time ranges overlap/are near
-  // (so we don't incorrectly combine unrelated things).
-  ALL = mergeSimilarEvents(ALL, 10 * 60 * 1000); // 10 min gap tolerance
-
-  render(ALL);
+    ALL = mergeSimilarEvents(ALL, 10 * 60 * 1000);
+    render(ALL);
+  } catch (err) {
+    app.innerHTML = `<div class="loading">⚠️ Failed to load events.json<br><small>${escapeHtml(err.message)}</small></div>`;
+  }
 }
 
 function mergeSimilarEvents(events, gapMs) {
-  // Group candidates by day + camera + label
   const groups = new Map();
   for (const e of events) {
     const day = dayKeyLocal(e.start);
@@ -297,7 +283,6 @@ function mergeSimilarEvents(events, gapMs) {
       const overlapsOrClose = s <= (curEnd + gapMs);
 
       if (overlapsOrClose) {
-        // merge into cur
         cur.start = new Date(Math.min(new Date(cur.start).getTime(), s)).toISOString();
         cur.end = new Date(Math.max(curEnd, en)).toISOString();
         cur.items = [...(cur.items || []), ...(e.items || [])]
@@ -305,10 +290,8 @@ function mergeSimilarEvents(events, gapMs) {
           .sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
         cur.count = cur.items.length || (cur.count || 0) + (e.count || 0);
 
-        // keep a thumb
         if (!cur.thumb_file_id && e.thumb_file_id) cur.thumb_file_id = e.thumb_file_id;
         if (!cur.thumb_file_id && cur.items.length) cur.thumb_file_id = cur.items[0].file_id;
-
       } else {
         merged.push(cur);
         cur = cloneEvent(e);
@@ -318,7 +301,6 @@ function mergeSimilarEvents(events, gapMs) {
     if (cur) merged.push(cur);
   }
 
-  // Stable-ish ordering: newest first overall
   merged.sort((a, b) => new Date(b.start) - new Date(a.start));
   return merged;
 }
@@ -330,22 +312,50 @@ function cloneEvent(e) {
   };
 }
 
+// ========================================
+// RENDERING
+// ========================================
 function render(events) {
-  // Stats
   const photoTotal = events.reduce((acc, x) => acc + (x.count || (x.items ? x.items.length : 0)), 0);
   const dayCount = new Set(events.map(e => dayKeyLocal(e.start))).size;
 
-  statEvents.textContent = String(events.length);
-  statPhotos.textContent = String(photoTotal);
-  statDays.textContent = String(dayCount);
+  animateCounter(statEvents, events.length);
+  animateCounter(statPhotos, photoTotal);
+  animateCounter(statDays, dayCount);
 
-  meta.textContent = `${events.length} events • ${photoTotal} photos`;
+  meta.textContent = `Showing ${events.length} events across ${dayCount} days with ${photoTotal} total photos`;
 
   renderByDay(events);
 }
 
+function animateCounter(element, targetValue) {
+  const duration = 1000;
+  const startValue = 0;
+  const startTime = performance.now();
+
+  function updateCounter(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+    const currentValue = Math.floor(startValue + (targetValue - startValue) * easeProgress);
+    
+    element.textContent = currentValue.toLocaleString();
+    
+    if (progress < 1) {
+      requestAnimationFrame(updateCounter);
+    }
+  }
+
+  requestAnimationFrame(updateCounter);
+}
+
 function renderByDay(events) {
   app.innerHTML = "";
+
+  if (!events.length) {
+    app.innerHTML = `<div class="loading">No events found</div>`;
+    return;
+  }
 
   const map = new Map();
   for (const e of events) {
@@ -357,7 +367,6 @@ function renderByDay(events) {
   const days = [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
   for (const [day, items] of days) {
-    // row by day, and within the day show newest first
     items.sort((a, b) => new Date(b.start) - new Date(a.start));
 
     const section = document.createElement("section");
@@ -366,8 +375,8 @@ function renderByDay(events) {
     const head = document.createElement("div");
     head.className = "row-title";
     head.innerHTML = `
-      <h2>${escapeHtml(day)}</h2>
-      <div class="small">${items.length} events</div>
+      <h2>${escapeHtml(formatDayDisplay(day))}</h2>
+      <div class="small">${items.length} event${items.length !== 1 ? 's' : ''}</div>
     `;
 
     const scroller = document.createElement("div");
@@ -386,38 +395,38 @@ function renderByDay(events) {
       });
     });
   }
-
-  if (!days.length) {
-    app.innerHTML = `<div class="loading">No events found.</div>`;
-  }
 }
 
 function cardHTML(e) {
   const thumbId = e.thumb_file_id || (e.items?.length ? e.items[0].file_id : "");
   const thumb = thumbId ? driveThumb(thumbId, 900) : "";
-
-  const title = `${e.label}`;
-  const sub = `${fmtRange(e.start, e.end)} • ${escapeHtml(e.camera)}`;
-  const metaLine = `${e.count || (e.items ? e.items.length : 0)} photos`;
+  const title = e.label;
+  const sub = `${fmtRange(e.start, e.end)}`;
+  const camera = e.camera;
+  const photoCount = e.count || (e.items ? e.items.length : 0);
 
   return `
     <div class="card" data-event="${escapeHtml(e.id)}">
       <div class="thumb">
-        ${thumb ? `<img src="${escapeHtml(thumb)}" alt="">` : `📷`}
+        ${thumb ? `<img src="${escapeHtml(thumb)}" alt="${escapeHtml(title)}" loading="lazy">` : `📷`}
       </div>
       <div class="body">
         <div class="ctitle">${escapeHtml(title)}</div>
         <div class="sub">${escapeHtml(sub)}</div>
-        <div class="sub">${escapeHtml(metaLine)}</div>
+        <div class="sub">📍 ${escapeHtml(camera)}</div>
+        <div class="sub">📸 ${photoCount} photo${photoCount !== 1 ? 's' : ''}</div>
       </div>
     </div>
   `;
 }
 
-// ---- Modal ----
+// ========================================
+// MODAL
+// ========================================
 function openModal(e) {
   modalTitle.textContent = `${e.label} • ${e.camera}`;
-  modalSub.textContent = `${fmtRange(e.start, e.end)} • ${e.count || (e.items ? e.items.length : 0)} photos`;
+  const photoCount = e.count || (e.items ? e.items.length : 0);
+  modalSub.textContent = `${fmtRange(e.start, e.end)} • ${photoCount} photo${photoCount !== 1 ? 's' : ''}`;
 
   const items = e.items || [];
   modalGrid.innerHTML = items
@@ -429,8 +438,8 @@ function openModal(e) {
 
       return `
         <div class="pcell">
-          <a href="${escapeHtml(view)}" target="_blank" rel="noreferrer">
-            ${thumb ? `<img src="${escapeHtml(thumb)}" alt="">` : "📷"}
+          <a href="${escapeHtml(view)}" target="_blank" rel="noopener noreferrer">
+            ${thumb ? `<img src="${escapeHtml(thumb)}" alt="Wildlife photo" loading="lazy">` : "📷"}
           </a>
           <div class="pmeta">${escapeHtml(dt || p.filename || "")}</div>
         </div>
@@ -439,18 +448,25 @@ function openModal(e) {
     .join("");
 
   modal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
 }
+
 function closeModal() {
   modal.classList.add("hidden");
   modalGrid.innerHTML = "";
+  document.body.style.overflow = "";
 }
+
 modalClose.addEventListener("click", closeModal);
 modalOverlay.addEventListener("click", closeModal);
+
 document.addEventListener("keydown", (ev) => {
-  if (ev.key === "Escape" && !modal.classList.contains("hidden")) closeModal();
+  if (ev.key === "Escape" && !modal.classList.contains("hidden")) {
+    closeModal();
+  }
 });
 
-// ---- Start ----
-load().catch((err) => {
-  app.innerHTML = `<div class="loading">Failed to load events.json. ${escapeHtml(err.message)}</div>`;
-});
+// ========================================
+// START
+// ========================================
+load();
