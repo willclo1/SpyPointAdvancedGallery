@@ -1,9 +1,19 @@
 name: Deploy Ranch Site (GitHub Pages)
 
 on:
+  # 🔥 RUN WHEN PI PUSHES A COMMIT
+  push:
+    branches: ["main"]
+    paths:
+      - "docs/**"
+      - ".github/workflows/**"
+
+  # manual run
   workflow_dispatch:
+
+  # fallback scheduled rebuild
   schedule:
-    - cron: "0 18 * * *" # every 30 minutes (adjust)
+    - cron: "0 18 * * *"   # daily 12 PM Central
 
 permissions:
   contents: read
@@ -17,6 +27,7 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -26,8 +37,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install rclone
-        run: |
-          curl -fsSL https://rclone.org/install.sh | sudo bash
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash
 
       - name: Configure rclone
         env:
@@ -36,15 +46,16 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "$RCLONE_CONF" > ~/.config/rclone/rclone.conf
 
-      # Pull the latest events.json from your Drive folder into docs/
+      # Pull latest events.json into docs/
       - name: Download events.json from Drive
         env:
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
         run: |
           mkdir -p docs
-          rclone copyto "gdrive:events.json" "docs/events.json" --drive-root-folder-id "$GDRIVE_FOLDER_ID" -v
+          rclone copyto "gdrive:events.json" "docs/events.json" \
+            --drive-root-folder-id "$GDRIVE_FOLDER_ID" -v
 
-      # Optional sanity check so you don’t deploy a broken site
+      # sanity check
       - name: Verify docs/ exists
         run: |
           test -f docs/index.html || (echo "Missing docs/index.html" && exit 1)
