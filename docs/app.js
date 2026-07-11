@@ -154,12 +154,95 @@ function canonicalSpecies(label) {
 // ========================================
 // HELPER FUNCTIONS
 // ========================================
-function driveThumb(fileId, size = 800) {
-  return `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${size}`;
+function extractDriveFileId(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  if (!raw.includes("/") && !raw.includes("?") && raw.length >= 10) {
+    return raw;
+  }
+
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /[?&]id=([a-zA-Z0-9_-]+)/,
+    /\/d\/([a-zA-Z0-9_-]+)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match) return match[1];
+  }
+
+  return "";
+}
+
+function driveThumbCandidates(fileId, size = 900, directUrl = "") {
+  const id = extractDriveFileId(fileId || directUrl);
+  const urls = [];
+
+  if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    urls.push(directUrl);
+  }
+
+  if (id) {
+    urls.push(
+      `https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w${size}`,
+      `https://lh3.googleusercontent.com/d/${encodeURIComponent(id)}=w${size}`,
+      `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`
+    );
+  }
+
+  return [...new Set(urls)];
 }
 
 function driveView(fileId) {
-  return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
+  const id = extractDriveFileId(fileId);
+  return id ? `https://drive.google.com/file/d/${encodeURIComponent(id)}/view` : "#";
+}
+
+function imageHTML({ fileId = "", directUrl = "", alt = "Wildlife photo", eager = false }) {
+  const candidates = driveThumbCandidates(fileId, 900, directUrl);
+  if (!candidates.length) return `<div class="photo-unavailable">Photo unavailable</div>`;
+
+  const encodedCandidates = escapeHtml(JSON.stringify(candidates));
+  return `<img
+    src="${escapeHtml(candidates[0])}"
+    data-sources='${encodedCandidates}'
+    data-source-index="0"
+    alt="${escapeHtml(alt)}"
+    loading="${eager ? "eager" : "lazy"}"
+    decoding="async"
+    ${eager ? 'fetchpriority="high"' : ''}
+  >`;
+}
+
+function installImageFallbacks(root = document) {
+  root.querySelectorAll("img[data-sources]").forEach((img) => {
+    if (img.dataset.fallbackBound === "true") return;
+    img.dataset.fallbackBound = "true";
+
+    img.addEventListener("error", () => {
+      let sources = [];
+      try {
+        sources = JSON.parse(img.dataset.sources || "[]");
+      } catch (_) {
+        sources = [];
+      }
+
+      const current = Number(img.dataset.sourceIndex || 0);
+      const next = current + 1;
+      if (next < sources.length) {
+        img.dataset.sourceIndex = String(next);
+        img.src = sources[next];
+        return;
+      }
+
+      const fallback = document.createElement("div");
+      fallback.className = "photo-unavailable";
+      fallback.textContent = "Photo unavailable";
+      img.replaceWith(fallback);
+    });
+  });
 }
 
 function fmtRange(start, end) {
@@ -229,7 +312,12 @@ async function load() {
         const start = x.start ?? x.start_time ?? x.begin ?? "";
         const end = x.end ?? x.end_time ?? x.finish ?? start;
         const id = x.event_id ?? x.session_id ?? x.id ?? `${camera}|${label}|${start}`;
-        const thumbId = x.thumbnail_file_id || x.thumb_file_id || x.file_id || (items.length ? items[0].file_id : "");
+        const firstItem = items.length ? items[0] : {};
+        const thumbId = extractDriveFileId(
+          x.thumbnail_file_id || x.thumb_file_id || x.file_id || x.fileId || x.drive_file_id ||
+          firstItem.file_id || firstItem.fileId || firstItem.drive_file_id || firstItem.drive_url || ""
+        );
+        const thumbUrl = x.thumbnail_url || x.thumb_url || x.image_url || firstItem.thumbnail_url || firstItem.thumb_url || "";
 
         return {
           id: String(id),
@@ -239,11 +327,13 @@ async function load() {
           end,
           count: Number.isFinite(x.count) ? x.count : items.length,
           thumb_file_id: thumbId,
+          thumb_url: thumbUrl,
           items: items.map((p) => ({
-            file_id: p.file_id,
+            file_id: extractDriveFileId(p.file_id || p.fileId || p.drive_file_id || p.drive_url || p.url || ""),
+            thumbnail_url: p.thumbnail_url || p.thumb_url || p.image_url || "",
             datetime: p.datetime,
             filename: p.filename,
-            drive_url: p.drive_url,
+            drive_url: p.drive_url || p.url || "",
           })),
         };
       })
@@ -291,7 +381,9 @@ function mergeSimilarEvents(events, gapMs) {
         cur.count = cur.items.length || (cur.count || 0) + (e.count || 0);
 
         if (!cur.thumb_file_id && e.thumb_file_id) cur.thumb_file_id = e.thumb_file_id;
+        if (!cur.thumb_url && e.thumb_url) cur.thumb_url = e.thumb_url;
         if (!cur.thumb_file_id && cur.items.length) cur.thumb_file_id = cur.items[0].file_id;
+        if (!cur.thumb_url && cur.items.length) cur.thumb_url = cur.items[0].thumbnail_url || "";
       } else {
         merged.push(cur);
         cur = cloneEvent(e);
@@ -365,6 +457,7 @@ function renderByDay(events) {
     section.appendChild(head);
     section.appendChild(scroller);
     app.appendChild(section);
+    installImageFallbacks(scroller);
 
     scroller.querySelectorAll("[data-event]").forEach((el) => {
       const open = () => {
@@ -384,8 +477,9 @@ function renderByDay(events) {
 }
 
 function cardHTML(e) {
-  const thumbId = e.thumb_file_id || (e.items?.length ? e.items[0].file_id : "");
-  const thumb = thumbId ? driveThumb(thumbId, 900) : "";
+  const firstItem = e.items?.length ? e.items[0] : {};
+  const thumbId = e.thumb_file_id || firstItem.file_id || "";
+  const thumbUrl = e.thumb_url || firstItem.thumbnail_url || "";
   const title = e.label;
   const sub = fmtRange(e.start, e.end);
   const camera = e.camera || "Unknown camera";
@@ -393,15 +487,25 @@ function cardHTML(e) {
 
   return `
     <article class="card" data-event="${escapeHtml(e.id)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(title)} event from ${escapeHtml(camera)}">
-      <div class="thumb">
-        ${thumb ? `<img src="${escapeHtml(thumb)}" alt="${escapeHtml(title)} captured by ${escapeHtml(camera)}" loading="lazy" decoding="async">` : `Photo unavailable`}
+      <div class="card-media">
+        <div class="thumb">
+          ${imageHTML({
+            fileId: thumbId,
+            directUrl: thumbUrl,
+            alt: `${title} captured by ${camera}`,
+          })}
+        </div>
+        <div class="card-status">${escapeHtml(camera)}</div>
       </div>
       <div class="body">
-        <div class="ctitle">${escapeHtml(title)}</div>
-        <div class="card-time">${escapeHtml(sub)}</div>
-        <div class="card-details">
-          <div class="card-camera">${escapeHtml(camera)}</div>
+        <div class="card-primary">
+          <div class="ctitle">${escapeHtml(title)}</div>
           <div class="card-count">${photoCount} photo${photoCount !== 1 ? "s" : ""}</div>
+        </div>
+        <div class="card-time">${escapeHtml(sub)}</div>
+        <div class="card-footer">
+          <div class="card-camera">${escapeHtml(formatDayDisplay(dayKeyLocal(e.start)))}</div>
+          <div class="card-open">View event</div>
         </div>
       </div>
     </article>
@@ -420,14 +524,17 @@ function openModal(e) {
   modalGrid.innerHTML = items
     .map((p) => {
       const fileId = p.file_id;
-      const thumb = fileId ? driveThumb(fileId, 900) : "";
       const view = p.drive_url || (fileId ? driveView(fileId) : "#");
       const dt = p.datetime ? new Date(p.datetime).toLocaleString() : "";
 
       return `
         <div class="pcell">
           <a href="${escapeHtml(view)}" target="_blank" rel="noopener noreferrer">
-            ${thumb ? `<img src="${escapeHtml(thumb)}" alt="Wildlife photo" loading="lazy" decoding="async">` : `<div class="photo-unavailable">Photo unavailable</div>`}
+            ${imageHTML({
+              fileId,
+              directUrl: p.thumbnail_url,
+              alt: p.filename || "Wildlife photo",
+            })}
           </a>
           <div class="pmeta">${escapeHtml(dt || p.filename || "")}</div>
         </div>
@@ -436,6 +543,7 @@ function openModal(e) {
     .join("");
 
   modal.classList.remove("hidden");
+  installImageFallbacks(modalGrid);
   document.body.style.overflow = "hidden";
 }
 
