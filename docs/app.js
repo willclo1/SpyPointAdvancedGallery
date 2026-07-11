@@ -252,7 +252,7 @@ async function load() {
     ALL = mergeSimilarEvents(ALL, 10 * 60 * 1000);
     render(ALL);
   } catch (err) {
-    app.innerHTML = `<div class="loading">⚠️ Failed to load events.json<br><small>${escapeHtml(err.message)}</small></div>`;
+    app.innerHTML = `<div class="loading">Unable to load events.json<small>${escapeHtml(err.message)}</small></div>`;
   }
 }
 
@@ -319,41 +319,20 @@ function render(events) {
   const photoTotal = events.reduce((acc, x) => acc + (x.count || (x.items ? x.items.length : 0)), 0);
   const dayCount = new Set(events.map(e => dayKeyLocal(e.start))).size;
 
-  animateCounter(statEvents, events.length);
-  animateCounter(statPhotos, photoTotal);
-  animateCounter(statDays, dayCount);
+  statEvents.textContent = events.length.toLocaleString();
+  statPhotos.textContent = photoTotal.toLocaleString();
+  statDays.textContent = dayCount.toLocaleString();
 
   meta.textContent = `Showing ${events.length} events across ${dayCount} days with ${photoTotal} total photos`;
 
   renderByDay(events);
 }
 
-function animateCounter(element, targetValue) {
-  const duration = 1000;
-  const startValue = 0;
-  const startTime = performance.now();
-
-  function updateCounter(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
-    const currentValue = Math.floor(startValue + (targetValue - startValue) * easeProgress);
-    
-    element.textContent = currentValue.toLocaleString();
-    
-    if (progress < 1) {
-      requestAnimationFrame(updateCounter);
-    }
-  }
-
-  requestAnimationFrame(updateCounter);
-}
-
 function renderByDay(events) {
   app.innerHTML = "";
 
   if (!events.length) {
-    app.innerHTML = `<div class="loading">No events found</div>`;
+    app.innerHTML = `<div class="empty-state">No events found for the current data set.</div>`;
     return;
   }
 
@@ -388,10 +367,17 @@ function renderByDay(events) {
     app.appendChild(section);
 
     scroller.querySelectorAll("[data-event]").forEach((el) => {
-      el.addEventListener("click", () => {
+      const open = () => {
         const id = el.getAttribute("data-event");
         const evt = items.find((x) => x.id === id);
         if (evt) openModal(evt);
+      };
+      el.addEventListener("click", open);
+      el.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open();
+        }
       });
     });
   }
@@ -401,22 +387,24 @@ function cardHTML(e) {
   const thumbId = e.thumb_file_id || (e.items?.length ? e.items[0].file_id : "");
   const thumb = thumbId ? driveThumb(thumbId, 900) : "";
   const title = e.label;
-  const sub = `${fmtRange(e.start, e.end)}`;
-  const camera = e.camera;
+  const sub = fmtRange(e.start, e.end);
+  const camera = e.camera || "Unknown camera";
   const photoCount = e.count || (e.items ? e.items.length : 0);
 
   return `
-    <div class="card" data-event="${escapeHtml(e.id)}">
+    <article class="card" data-event="${escapeHtml(e.id)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(title)} event from ${escapeHtml(camera)}">
       <div class="thumb">
-        ${thumb ? `<img src="${escapeHtml(thumb)}" alt="${escapeHtml(title)}" loading="lazy">` : `📷`}
+        ${thumb ? `<img src="${escapeHtml(thumb)}" alt="${escapeHtml(title)} captured by ${escapeHtml(camera)}" loading="lazy" decoding="async">` : `Photo unavailable`}
       </div>
       <div class="body">
         <div class="ctitle">${escapeHtml(title)}</div>
-        <div class="sub">${escapeHtml(sub)}</div>
-        <div class="sub">📍 ${escapeHtml(camera)}</div>
-        <div class="sub">📸 ${photoCount} photo${photoCount !== 1 ? 's' : ''}</div>
+        <div class="card-time">${escapeHtml(sub)}</div>
+        <div class="card-details">
+          <div class="card-camera">${escapeHtml(camera)}</div>
+          <div class="card-count">${photoCount} photo${photoCount !== 1 ? "s" : ""}</div>
+        </div>
       </div>
-    </div>
+    </article>
   `;
 }
 
@@ -439,7 +427,7 @@ function openModal(e) {
       return `
         <div class="pcell">
           <a href="${escapeHtml(view)}" target="_blank" rel="noopener noreferrer">
-            ${thumb ? `<img src="${escapeHtml(thumb)}" alt="Wildlife photo" loading="lazy">` : "📷"}
+            ${thumb ? `<img src="${escapeHtml(thumb)}" alt="Wildlife photo" loading="lazy" decoding="async">` : `<div class="photo-unavailable">Photo unavailable</div>`}
           </a>
           <div class="pmeta">${escapeHtml(dt || p.filename || "")}</div>
         </div>
@@ -464,6 +452,33 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !modal.classList.contains("hidden")) {
     closeModal();
   }
+});
+
+// ========================================
+// THEME
+// ========================================
+const themeToggle = document.getElementById("themeToggle");
+const themeToggleValue = document.getElementById("themeToggleValue");
+const THEME_KEY = "ranch-events-theme";
+const THEME_ORDER = ["auto", "dark", "light"];
+
+function applyTheme(theme) {
+  if (theme === "auto") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.setAttribute("data-theme", theme);
+  }
+  themeToggleValue.textContent = theme.charAt(0).toUpperCase() + theme.slice(1);
+  localStorage.setItem(THEME_KEY, theme);
+}
+
+const savedTheme = localStorage.getItem(THEME_KEY);
+applyTheme(THEME_ORDER.includes(savedTheme) ? savedTheme : "auto");
+
+themeToggle.addEventListener("click", () => {
+  const current = localStorage.getItem(THEME_KEY) || "auto";
+  const next = THEME_ORDER[(THEME_ORDER.indexOf(current) + 1) % THEME_ORDER.length];
+  applyTheme(next);
 });
 
 // ========================================
